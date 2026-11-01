@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#060913" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="TW-Quant 台股量化" />
+  <title>TW-Quant Alpha｜台股全市場即時量化交易與條件警示戰情室</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;600;700&family=Noto+Sans+TC:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/styles.css?v=3" />
+</head>
+<body>
+  <!-- 右上角即時條件觸發彈窗通知區 -->
+  <div id="toastContainer" class="toast-container" aria-live="polite"></div>
+
+  <!-- 頂部全域導覽與即時搜尋列 -->
+  <header class="topbar">
+    <div class="topbar-brand">
+      <div class="brand-logo">
+        <span class="logo-pulse"></span>
+        <span class="logo-glyph">α</span>
+      </div>
+      <div>
+        <h1 class="brand-title">TW-Quant Alpha <span class="brand-badge">台股全市場量化終端</span></h1>
+        <p class="brand-sub" id="universeSubText">載入上市・上櫃・興櫃全市場個股中...</p>
+      </div>
+    </div>
+
+    <!-- 全市場個股即時搜尋框（完整相容 iOS/Android 中文選字、虛擬鍵盤搜尋鍵與一鍵查詢） -->
+    <div class="search-wrapper" id="searchWrapper">
+      <form id="globalSearchForm" class="search-input-box" action="#" role="search">
+        <span class="search-icon">🔍</span>
+        <input
+          type="search"
+          id="globalSearchInput"
+          enterkeyhint="search"
+          autocomplete="off"
+          autocorrect="off"
+          autocapitalize="off"
+          spellcheck="false"
+          placeholder="輸入代號或股名查現在股價（例：2330、台積電、長榮、6488）"
+        />
+        <button type="button" id="searchClearBtn" class="search-clear-btn hidden" aria-label="清除搜尋">✕</button>
+        <kbd class="search-kbd" title="按下 / 鍵快速聚焦搜尋">/</kbd>
+        <button type="submit" id="searchSubmitBtn" class="search-submit-btn">查詢</button>
+      </form>
+      <div id="searchDropdown" class="search-dropdown hidden"></div>
+    </div>
+
+    <!-- 連線狀態與控制按鈕 -->
+    <div class="topbar-actions">
+      <div class="conn-pill" id="connStatusPill">
+        <span class="conn-dot" id="connDot"></span>
+        <span id="connStatusText">連線證交所中...</span>
+      </div>
+      <button id="mobileConnectBtn" class="btn btn-accent" title="顯示手機掃碼 QR Code 與跨網域連線網址">
+        📱 手機連線
+      </button>
+      <button id="simToggleBtn" class="btn btn-sim" title="盤後或週末可一鍵開啟台股真實升降單位模擬撮合，即時測試跳價與頁面警示彈窗">
+        ⚡ 模擬盤中跳動
+      </button>
+      <button id="soundToggleBtn" class="btn btn-ghost active" title="切換條件觸發時的提示音效">
+        🔔 音效：開
+      </button>
+      <button id="refreshAllBtn" class="btn btn-ghost" title="重新向證交所與櫃買中心同步全市場最新資料">
+        🔄 同步全市場
+      </button>
+    </div>
+  </header>
+
+  <!-- 熱門股快速切換列 -->
+  <section class="quick-tickers-bar">
+    <span class="quick-label">熱門秒查現價：</span>
+    <div class="quick-chips" id="quickChips">
+      <button class="chip" data-code="2330">2330 台積電</button>
+      <button class="chip" data-code="2317">2317 鴻海</button>
+      <button class="chip" data-code="2454">2454 聯發科</button>
+      <button class="chip" data-code="2382">2382 廣達</button>
+      <button class="chip" data-code="2603">2603 長榮</button>
+      <button class="chip" data-code="3231">3231 緯創</button>
+      <button class="chip" data-code="3017">3017 奇鋐</button>
+      <button class="chip" data-code="6488">6488 環球晶</button>
+      <button class="chip" data-code="5274">5274 信驊</button>
+      <button class="chip" data-code="0050">0050 元大台灣50</button>
+      <button class="chip" data-code="00878">00878 國泰永續高股息</button>
+    </div>
+  </section>
+
+  <!-- 大盤指數與全市場漲跌家數廣度指標 -->
+  <section class="pulse-strip">
+    <div class="pulse-card" id="taiexCard">
+      <div class="pulse-head">
+        <span class="pulse-name">發行量加權指數 (TAIEX)</span>
+        <span class="pulse-time" id="taiexTime">--:--:--</span>
+      </div>
+      <div class="pulse-main">
+        <span class="pulse-price mono" id="taiexPrice">--</span>
+        <span class="pulse-chg mono" id="taiexChg">--</span>
+      </div>
+      <div class="pulse-foot mono" id="taiexRange">最高 -- ｜ 最低 --</div>
+    </div>
+
+    <div class="pulse-card" id="tpexCard">
+      <div class="pulse-head">
+        <span class="pulse-name">櫃買市場指數 (TPEx)</span>
+        <span class="pulse-time" id="tpexTime">--:--:--</span>
+      </div>
+      <div class="pulse-main">
+        <span class="pulse-price mono" id="tpexPrice">--</span>
+        <span class="pulse-chg mono" id="tpexChg">--</span>
+      </div>
+      <div class="pulse-foot mono" id="tpexRange">最高 -- ｜ 最低 --</div>
+    </div>
+
+    <div class="pulse-card breadth-card">
+      <div class="pulse-head">
+        <span class="pulse-name">全台股漲跌家數分布（台股慣例：紅漲 ▲ 綠跌 ▼）</span>
+        <span class="pulse-time mono" id="dataDateLabel">資料日期 --</span>
+      </div>
+      <div class="breadth-bar">
+        <div id="breadthUpBar" class="b-seg b-up" style="width: 45%"></div>
+        <div id="breadthFlatBar" class="b-seg b-flat" style="width: 10%"></div>
+        <div id="breadthDownBar" class="b-seg b-down" style="width: 45%"></div>
+      </div>
+      <div class="breadth-stats mono">
+        <span class="up-text">▲ 上漲 <strong id="bUpCount">0</strong> (漲停 <strong id="bLuCount">0</strong>)</span>
+        <span class="flat-text">平盤 <strong id="bFlatCount">0</strong></span>
+        <span class="down-text">▼ 下跌 <strong id="bDownCount">0</strong> (跌停 <strong id="bLdCount">0</strong>)</span>
+      </div>
+    </div>
+
+    <div class="pulse-card alert-summary-card" id="alertHeroSummary">
+      <div class="pulse-head">
+        <span class="pulse-name">🚨 全市場量化條件觸發總數</span>
+        <span class="live-tag">即時掃描中</span>
+      </div>
+      <div class="pulse-main">
+        <span class="alert-total-num mono" id="heroAlertTotal">0</span>
+        <span class="alert-total-unit">筆觸發訊號</span>
+      </div>
+      <div class="pulse-foot">
+        <button class="link-btn" id="jumpToRulesBtn">⚙️ 檢視 / 調整自研生命線與 6 大戰法 →</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 核心雙欄戰情室：左欄【個股現在股價・自研生命線・五檔・K線】，右欄【即時量化警示雷達・自研戰法設定】 -->
+  <main class="cockpit-grid">
+    <!-- 左欄：個股即時報價與量化診斷 -->
+    <section class="panel stock-cockpit-panel" id="stockCockpitCard">
+      <div class="stock-hero-header">
+        <div class="stock-title-group">
+          <div class="stock-badges-row">
+            <span class="market-tag" id="stMarketTag">上市</span>
+            <span class="stock-code mono" id="stCode">2330</span>
+            <button class="watch-btn" id="watchStarBtn" title="加入或移除自選監控">☆ 自選</button>
+          </div>
+          <h2 class="stock-name" id="stName">台積電</h2>
+          <p class="stock-updated mono" id="stUpdated">最後撮合更新：--:--:--</p>
+        </div>
+
+        <div class="stock-price-hero" id="stPriceBox">
+          <div class="now-price-label">現在股價 (TWD)</div>
+          <div class="now-price-row">
+            <span class="now-price mono" id="stPrice">--</span>
+            <div class="now-chg-stack mono">
+              <span id="stChange">--</span>
+              <span id="stChangePct">--%</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="stock-quick-actions">
+          <button class="btn btn-accent" id="openCustomAlertForStockBtn">🎯 守生命線 / 到價警示</button>
+          <button class="btn btn-ghost" id="forceRefreshStockBtn">⚡ 立即更新現價</button>
+        </div>
+      </div>
+
+      <!-- 若該個股觸發任何量化條件，直接醒目顯示於個股頁頂部 -->
+      <div id="stTriggeredBanner" class="stock-triggered-banner hidden"></div>
+
+      <!-- ★ 自研【α-量價多空生命線】戰略位階儀表條 -->
+      <div class="lifeline-strip" id="lifelineStrip">
+        <div class="ll-main">
+          <span class="ll-badge">🧬 自研 α-多空生命線</span>
+          <strong class="ll-price mono" id="llPriceVal">-- 元</strong>
+          <span class="ll-status-pill" id="llStatusPill">計算中...</span>
+        </div>
+        <div class="ll-metrics mono">
+          <span>生命線乖離：<strong id="llBiasVal">--</strong></span>
+          <span>三線糾結度：<strong id="llSpreadVal">--</strong></span>
+          <span>多空九轉：<strong id="llTdVal">--</strong></span>
+          <span>口袋支點量比：<strong id="llLockVal">--</strong></span>
+        </div>
+      </div>
+
+      <!-- 個股關鍵行情與估值指標 12 宮格 -->
+      <div class="quote-metrics-grid mono">
+        <div class="qm-item"><span class="qm-label">開盤價</span><span class="qm-val" id="qmOpen">--</span></div>
+        <div class="qm-item"><span class="qm-label">最高價</span><span class="qm-val" id="qmHigh">--</span></div>
+        <div class="qm-item"><span class="qm-label">最低價</span><span class="qm-val" id="qmLow">--</span></div>
+        <div class="qm-item"><span class="qm-label">昨收價</span><span class="qm-val" id="qmPrev">--</span></div>
+        <div class="qm-item"><span class="qm-label">漲停價</span><span class="qm-val up-text" id="qmLimitUp">--</span></div>
+        <div class="qm-item"><span class="qm-label">跌停價</span><span class="qm-val down-text" id="qmLimitDown">--</span></div>
+        <div class="qm-item"><span class="qm-label">總成交量</span><span class="qm-val" id="qmVol">-- 張</span></div>
+        <div class="qm-item"><span class="qm-label">成交金額</span><span class="qm-val" id="qmTurnover">-- 百萬</span></div>
+        <div class="qm-item"><span class="qm-label">本益比 P/E</span><span class="qm-val" id="qmPe">--</span></div>
+        <div class="qm-item"><span class="qm-label">現金殖利率</span><span class="qm-val" id="qmYield">--</span></div>
+        <div class="qm-item"><span class="qm-label">股價淨值比</span><span class="qm-val" id="qmPb">--</span></div>
+        <div class="qm-item quant-score-cell">
+          <span class="qm-label">自研量化分</span>
+          <span class="qm-val score-pill" id="qmQuantScore">-- / 100</span>
+        </div>
+      </div>
+
+      <!-- K 線與自研【α-多空生命線・乾坤三線】互動圖表 -->
+      <div class="chart-section">
+        <div class="chart-toolbar">
+          <div class="chart-toolbar-left">
+            <div class="seg-group" id="klineIntervalTabs">
+              <button class="seg-btn active" data-interval="1d">日K + ★戰法訊號</button>
+              <button class="seg-btn" data-interval="5m">5分K (盤中)</button>
+            </div>
+            <div class="seg-group" id="klineZoomTabs" title="調整 K 棒顯示根數，放大可更清楚檢視每根買賣標記">
+              <button class="seg-btn" data-bars="38">放大(38根)</button>
+              <button class="seg-btn active" data-bars="55">標準(55根)</button>
+              <button class="seg-btn" data-bars="85">全貌(85根)</button>
+            </div>
+          </div>
+          <div class="seg-group" id="subChartTabs">
+            <button class="seg-btn active" data-sub="VOL">成交量</button>
+            <button class="seg-btn" data-sub="KD">KD(9,3,3)</button>
+            <button class="seg-btn" data-sub="RSI">RSI(14)</button>
+            <button class="seg-btn" data-sub="MACD">MACD</button>
+          </div>
+        </div>
+        <div class="chart-legend-bar">
+          <div class="ma-legend mono" id="chartHoverLegend">
+            <span class="leg-lifeline">★ α-生命線: --</span>
+            <span class="leg-ma5">● 短攻EMA5: --</span>
+            <span class="leg-ma20">● 輔攻EMA10: --</span>
+            <span class="leg-ma60">● 季線MA60: --</span>
+          </div>
+          <div class="kbar-sig-guide">
+            <span class="ks-pill ks-squeeze">買★拔蔥</span>
+            <span class="ks-pill ks-flip">買★翻多</span>
+            <span class="ks-pill ks-hold">買★守線</span>
+            <span class="ks-pill ks-pocket">買★支點</span>
+            <span class="ks-pill ks-tdbot">買▲九轉</span>
+            <span class="ks-pill ks-break">賣▼破線</span>
+            <span class="ks-pill ks-tdtop">賣▼高九</span>
+          </div>
+        </div>
+        <div class="canvas-wrap">
+          <canvas id="klineCanvas"></canvas>
+          <div id="chartLoadingOverlay" class="chart-overlay hidden">載入即時 K 線與自研生命線 2.0 訊號中...</div>
+        </div>
+      </div>
+
+      <!-- 下方雙卡：即時最佳五檔委買委賣 ＋ 自研戰法與法人籌碼綜合判讀 -->
+      <div class="cockpit-bottom-split">
+        <!-- 最佳五檔報價 -->
+        <div class="subcard orderbook-card">
+          <div class="subcard-head">
+            <h3>🐋 即時最佳五檔與巨鯨近端壓差</h3>
+            <span class="mono ob-ratio-tag" id="obRatioLabel">近端買壓 --%</span>
+          </div>
+          <div class="ob-power-bar">
+            <div id="obBidBar" class="ob-power-bid" style="width: 50%"></div>
+            <div id="obAskBar" class="ob-power-ask" style="width: 50%"></div>
+          </div>
+          <div class="ob-table-head mono">
+            <span>委買量(張)</span>
+            <span>委買價</span>
+            <span>委賣價</span>
+            <span>委賣量(張)</span>
+          </div>
+          <div id="orderbookRows" class="ob-rows mono"></div>
+        </div>
+
+        <!-- 三大法人籌碼與自研戰法體檢 -->
+        <div class="subcard factor-diagnosis-card">
+          <div class="subcard-head">
+            <h3>🧬 自研戰法實戰紀律與籌碼診斷</h3>
+            <span class="verdict-badge" id="quantVerdictBadge">研判中</span>
+          </div>
+          <div class="inst-chips-grid mono">
+            <div class="inst-box">
+              <span class="inst-label">外資買賣超</span>
+              <strong id="instForeign">-- 張</strong>
+            </div>
+            <div class="inst-box">
+              <span class="inst-label">投信買賣超</span>
+              <strong id="instTrust">-- 張</strong>
+            </div>
+            <div class="inst-box">
+              <span class="inst-label">自營商買賣超</span>
+              <strong id="instDealer">-- 張</strong>
+            </div>
+            <div class="inst-box">
+              <span class="inst-label">三大法人合計</span>
+              <strong id="instTotal">-- 張</strong>
+            </div>
+          </div>
+          <div class="tech-readout-grid mono">
+            <div><span>RSI(14)：</span><strong id="diagRsi">--</strong></div>
+            <div><span>日 KD(9)：</span><strong id="diagKd">--</strong></div>
+            <div><span>MACD 柱：</span><strong id="diagMacd">--</strong></div>
+            <div><span>20日量比：</span><strong id="diagVolRatio">--</strong></div>
+            <div><span>下影神針：</span><strong id="diagMa20Bias">--</strong></div>
+            <div><span>布林 %B：</span><strong id="diagBbPct">--</strong></div>
+          </div>
+          <p class="quant-commentary" id="quantCommentary">正在分析自研生命線與多因子狀態...</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 右欄：即時頁面警示雷達 ＆ 自研戰法中樞 -->
+    <aside class="right-rail">
+      <!-- 即時量化警示雷達面板 -->
+      <section class="panel alert-radar-panel">
+        <div class="panel-head">
+          <div class="panel-title-wrap">
+            <span class="radar-ping"></span>
+            <h2>🚨 自研戰法即時觸發警示雷達</h2>
+          </div>
+          <span class="count-pill mono" id="radarCountPill">0 筆</span>
+        </div>
+
+        <div class="alert-filter-pills" id="alertCategoryPills">
+          <button class="f-pill active" data-cat="ALL">全部</button>
+          <button class="f-pill" data-cat="LIFELINE">🧬 生命線戰法</button>
+          <button class="f-pill" data-cat="BULL">🌊 三線拔蔥</button>
+          <button class="f-pill" data-cat="CHIP">🚀 口袋支點</button>
+          <button class="f-pill" data-cat="TECH">⚡ 九轉神針</button>
+          <button class="f-pill" data-cat="MICRO">🐋 巨鯨點火</button>
+          <button class="f-pill" data-cat="RISK">☠️ 破線警報</button>
+          <button class="f-pill" data-cat="CUSTOM">🎯 自訂達標</button>
+        </div>
+
+        <div id="alertFeedList" class="alert-feed-list">
+          <!-- JS 動態渲染警示卡片 -->
+        </div>
+      </section>
+
+      <!-- 量化條件設定與自訂到價警示面板 -->
+      <section class="panel rules-config-panel" id="rulesConfigSection">
+        <div class="panel-head">
+          <h2>⚙️ 自研核心量化戰法設定</h2>
+          <div class="seg-group">
+            <button class="seg-btn active" id="tabSysRulesBtn">自研戰法 (6)</button>
+            <button class="seg-btn" id="tabCustomAlertBtn">🎯 守線/到價 (<span id="customAlertCountTab">0</span>)</button>
+          </div>
+        </div>
+
+        <!-- Tab 1: 自研 6 大台股量化戰法 2.0 -->
+        <div id="sysRulesPane" class="rules-pane">
+          <p class="rules-intro">
+            自主研發 2.0 升級版（含上影線假突破過濾與波動率自適應）：<strong>α-量價生命線</strong>、<strong>乾坤三線麻花</strong>、<strong>主力口袋支點</strong>、<strong>九轉極值神針</strong>、<strong>盤口巨鯨點火</strong> 與 <strong>破線／高九警報</strong>：
+          </p>
+          <div id="rulesListContainer" class="rules-list"></div>
+          <div class="rules-actions-bar">
+            <button id="saveRulesBtn" class="btn btn-primary">💾 套用戰法參數並重掃全台股</button>
+            <button id="resetRulesBtn" class="btn btn-ghost">↺ 恢復自研預設</button>
+          </div>
+        </div>
+
+        <!-- Tab 2: 個股自訂目標價／生命線防守價警示 -->
+        <div id="customAlertsPane" class="rules-pane hidden">
+          <p class="rules-intro">
+            可一鍵帶入個股的<strong>【α-多空生命線防守價】</strong>或任意目標價，盤中突破或跌破即刻於頁面彈窗響鈴警示：
+          </p>
+          <form id="customAlertForm" class="custom-alert-form">
+            <div class="form-row">
+              <label>股票代號
+                <input type="text" id="caCodeInput" placeholder="例 2330" required class="mono" />
+              </label>
+              <label>觸發方向
+                <select id="caOpSelect">
+                  <option value=">=">突破 / 高於等於 (≥)</option>
+                  <option value="<=">跌破 / 低於等於 (≤)</option>
+                </select>
+              </label>
+              <label>目標價 (元)
+                <input type="number" id="caPriceInput" step="0.01" placeholder="輸入價格" required class="mono" />
+              </label>
+            </div>
+            <div class="form-quick-fill">
+              <span id="caCurrentPriceHint" class="mono">目前現價：--</span>
+              <div class="quick-pct-btns">
+                <button type="button" class="mini-btn" data-fill="lifeline">🧬 帶入生命線防守價</button>
+                <button type="button" class="mini-btn" data-fill="now">帶入現價(立即測試)</button>
+                <button type="button" class="mini-btn" data-fill="+2%">現價 +2%</button>
+              </div>
+            </div>
+            <div class="form-row-bottom">
+              <input type="text" id="caNoteInput" placeholder="警示備註（例：跌破生命線停損 / 突破生命線追買）" />
+              <button type="submit" class="btn btn-accent">＋ 新增警示</button>
+            </div>
+          </form>
+          <div id="customAlertsList" class="custom-alerts-list"></div>
+        </div>
+      </section>
+    </aside>
+  </main>
+
+  <!-- 全台股所有個股（上市＋上櫃＋興櫃）即時行情與量化選股總表 -->
+  <section class="panel screener-section">
+    <div class="screener-header">
+      <div>
+        <h2>📊 全台股所有個股即時報價與量化選股總表</h2>
+        <p class="screener-sub">點擊任一個股即可切換至上方戰情室查看即時五檔、K線與詳細量化因子診斷</p>
+      </div>
+      <div class="screener-controls">
+        <div class="market-tabs" id="screenerMarketTabs">
+          <button class="m-tab active" data-mkt="ALL">全市場 (<span id="cntAll">0</span>)</button>
+          <button class="m-tab" data-mkt="TWSE">上市 (<span id="cntTwse">0</span>)</button>
+          <button class="m-tab" data-mkt="TPEX">上櫃 (<span id="cntTpex">0</span>)</button>
+          <button class="m-tab" data-mkt="ESB">興櫃 (<span id="cntEsb">0</span>)</button>
+          <button class="m-tab" data-mkt="ETF">ETF 專區</button>
+          <button class="m-tab alert-only-tab" data-mkt="ALERT">🚨 已觸發警示 (<span id="cntAlertStocks">0</span>)</button>
+          <button class="m-tab" data-mkt="WATCH">★ 自選股 (<span id="cntWatch">0</span>)</button>
+        </div>
+        <input
+          type="text"
+          id="tableFilterInput"
+          class="table-filter-input"
+          placeholder="於目前列表中篩選代號或股名..."
+        />
+      </div>
+    </div>
+
+    <div class="table-responsive">
+      <table class="quant-table">
+        <thead>
+          <tr>
+            <th data-sort="code">代號 / 名稱</th>
+            <th>市場</th>
+            <th data-sort="price" class="num">現在股價 ↕</th>
+            <th data-sort="change" class="num">漲跌 ↕</th>
+            <th data-sort="changePct" class="num">漲跌幅 ↕</th>
+            <th data-sort="volumeLots" class="num">成交量(張) ↕</th>
+            <th data-sort="turnoverM" class="num active-sort">成交額(百萬) ↓</th>
+            <th data-sort="lifelineBias" class="num">🧬 α-生命線 / 位階 ↕</th>
+            <th data-sort="quantScore" class="num">自研量化分 ↕</th>
+            <th data-sort="alertCount">觸發自研戰法 ↕</th>
+          </tr>
+        </thead>
+        <tbody id="screenerTableBody" class="mono"></tbody>
+      </table>
+    </div>
+
+    <div class="pagination-bar">
+      <span id="pageSummaryText" class="mono">顯示第 1–50 檔，共 0 檔</span>
+      <div class="page-btns">
+        <button id="prevPageBtn" class="btn btn-ghost">← 上一頁</button>
+        <span id="pageIndicator" class="mono">1 / 1</span>
+        <button id="nextPageBtn" class="btn btn-ghost">下一頁 →</button>
+      </div>
+    </div>
+  </section>
+
+  <footer class="app-footer">
+    <p>
+      資料來源：臺灣證券交易所 (TWSE OpenAPI &amp; MIS 基本市況報導)、證券櫃檯買賣中心 (TPEx 上櫃 / 興櫃 OpenAPI)、Yahoo Finance 歷史 K 線序列。
+      台股盤中交易時段（週一至週五 09:00–13:30）自動即時更新撮合；非交易時段顯示最近一交易日真實收盤行情，並支援開啟「⚡ 模擬盤中跳動」進行即時條件觸發測試。本網頁僅供量化資訊研究參考，不構成投資買賣建議。
+    </p>
+  </footer>
+
+  <!-- 手機連線 QR Code 與網址彈窗 -->
+  <div id="mobileModal" class="modal-backdrop hidden">
+    <div class="modal-box">
+      <div class="modal-head">
+        <h3>📱 手機即時看盤連線（支援 4G/5G 與 Wi-Fi）</h3>
+        <button id="closeMobileModalBtn" class="toast-close">✕</button>
+      </div>
+      <p class="modal-desc">
+        因為 <code>127.0.0.1</code> 僅限電腦自己連自己，手機請使用相機掃描下方 QR Code，或輸入專屬連線網址即可即時查股價與接收警示：
+      </p>
+      <div class="qr-card">
+        <img id="mobileQrImg" alt="手機連線 QR Code" width="190" height="190" />
+      </div>
+      <div class="url-block" id="pubUrlBlock">
+        <span class="url-label">🌐 跨網域行動網路 4G/5G 專屬網址（推薦，不受防火牆與 Wi-Fi 限制）：</span>
+        <a id="mobilePublicLink" href="#" target="_blank" rel="noopener" class="mono url-val">載入中...</a>
+      </div>
+      <div class="url-block">
+        <span class="url-label">📶 同 Wi-Fi / 個人熱點區網網址：</span>
+        <a id="mobileLanLink" href="#" target="_blank" rel="noopener" class="mono url-val">載入中...</a>
+      </div>
+      <p class="modal-tip">
+        💡 小技巧：iPhone Safari 開啟後點選底部「分享 → 加入主畫面」，即可變身全螢幕原生台股量化 App！
+      </p>
+    </div>
+  </div>
+
+  <script src="/app.js?v=4"></script>
+</body>
+</html>
